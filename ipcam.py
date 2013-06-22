@@ -1,13 +1,22 @@
 import requests
+import logging
 from flufl.enum import Enum
+
+
+# Logger settings
+#logger = logging.getLogger('ipcam')
+#formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+#hdlr.setFormatter(formatter)
+#logger.addHandler(hdlr)
+#logger.setLevel(logging.DEBUG)
 
 
 # this list is meant to be accessed by the status code returned
 # so the order matters,
 # eg: ddns_status[0] returns 'No action', because status 0 means 'No action'
 ddns_status = ['No Action',
-               'It’s connecting...',
-               'Can’t connect to the Server'
+               'It\'s connecting...',
+               'Can\'t connect to the Server',
                'Dyndns Succeed',
                'DynDns Failed: Dyndns.org Server Error',
                'DynDns Failed: Incorrect User or Password',
@@ -111,6 +120,7 @@ def _parse_status_response(response):
     Parses the reponse from get_status cgi call.
     :param response: (Required) String response from get_status cgi call.
     """
+    print response
     return dict(now='', alarm_status=alarm_status[0],
                 ddns_status=ddns_status[0], upnp_status=upnp_status[0])
 
@@ -128,10 +138,17 @@ class IPCam(object):
         :param cmd: (Required) The cgi command to call.
         :param request_params: (Optional) key=value params to send to the cgi command
         """
-        url = 'http://' + self.ip + ':' + str(self.port) + '/' + cmd
+        url = 'http://{ip}:{port}/{cmd}'.format(ip=self.ip, port=self.port, cmd=cmd.value)
         request_params['user'] = self.user
-        request_params['password'] = self.password
-        return requests.get(url, params=request_params).content
+        request_params['pwd'] = self.password
+        r = requests.get(url, params=request_params)
+        print r.url
+        print r.content
+        if r.content == 'error: illegal params.':
+            raise Exception('Error: illegal params.')
+        elif r.content == 'ok.':
+            return True
+        return r.content
 
     def snapshot(self, name=None):
         """
@@ -139,7 +156,7 @@ class IPCam(object):
         Requires visitor permission.
         :param name: (Optional) Snapshot's name. Defaults to 'device_id(Alias)_Currenttime.jpg'
         """
-        # Use “next_url” (for example:next_url=1
+        # Use "next_url" (for example:next_url=1
         # will name the photo: 1.jpg)
         params = dict(next_url=name)  if name else {}
         self.send_command(api.snapshot, **params)
@@ -207,3 +224,51 @@ class IPCam(object):
         :param status: (Required) upnp.enable or upnp.disable
         """
         self.send_command(api.set_upnp, enable=status)
+
+    def set_resolution(self, resolution=8):
+        """
+        Controls camera sensor parameters.
+        Requires operator permission.
+        :param resolution: (Optional) Possible values: 8:QVGA or 32:VGA. Default QVGA.
+        """
+        self.send_command(api.camera_control, param=0, value=resolution)
+
+    def set_brightness(self, brightness=125):
+        """
+        Controls camera sensor parameters.
+        Requires operator permission.
+        :param brightness: (Optional) From 0 to 255. Default 125.
+        """
+        self.send_command(api.camera_control, param=1, value=brightness)
+
+    def set_contrast(self, contrast=3):
+        """
+        Controls camera sensor parameters.
+        Requires operator permission.
+        :param contrast: (Optional) From 0 to 6. Default 3.
+        """
+        self.send_command(api.camera_control, param=2, value=contrast)
+
+    def set_mode(self, mode=1):
+        """
+        Controls camera sensor parameters.
+        Requires operator permission.
+        :param mode: (Optional) Possible values: 0:50hz, 1:60hz, 2:Outdoor. Default 50hz.
+        """
+        self.send_command(api.camera_control, param=3, value=mode)
+
+    def flip_and_mirror(self, value=0):
+        """
+        Controls camera sensor parameters.
+        Requires operator permission.
+        :param flip_and_mirror: (Optional) Possible values: 0:default, 1:flip, 2:mirror, 3:flip+mirror. Default default.
+        """
+        self.send_command(api.camera_control, param="5", value=value)
+
+    def upgrade_firmware(self):
+        """
+        Upgrades device firmware.
+        Requires administrator permission.
+        """
+        # FIXME uses post
+        self.send_command(api.upgrade_firmware)
